@@ -3,10 +3,10 @@ import { pluginReact } from '@rsbuild/plugin-react'
 
 export default defineConfig({
   html: {
-    title: 'Prototype',
+    title: 'Rich Text Editing with Yjs Text Type',
   },
   output: {
-    assetPrefix: '/rsbuild-react-bun-biome-starter-template/',
+    assetPrefix: '/2025-05-18-richtext-editing-with-yjs-text-type/',
   },
   plugins: [pluginReact()],
 })
