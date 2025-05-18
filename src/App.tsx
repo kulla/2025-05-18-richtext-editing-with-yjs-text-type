@@ -1,6 +1,14 @@
 import * as Y from 'yjs'
 import './App.css'
-import { useRef, useSyncExternalStore, useState, useEffect } from 'react'
+import {
+  useRef,
+  useSyncExternalStore,
+  useState,
+  useEffect,
+  type FormEvent,
+  useCallback,
+  useLayoutEffect,
+} from 'react'
 import { isEqual, last } from 'lodash'
 import { clsx } from 'clsx'
 
@@ -37,33 +45,111 @@ export default function App() {
 
   const [selection, setSelection] = useState<Position | null>(null)
 
-  useEffect(() => {
-    const handleSelectionChange = () => {
-      const newPosition = getSelectionPosition(window.getSelection())
+  const handleBeforeInput = useCallback(
+    (event: FormEvent<HTMLDivElement>) => {
+      event.stopPropagation()
 
-      if (!isEqual(newPosition, selection)) {
-        setSelection(newPosition)
-      }
+      if (!isInputEvent(event.nativeEvent)) return
+
+      const { data } = event.nativeEvent
+
+      if (typeof data !== 'string') return
+      if (data.length === 0) return
+
+      if (selection == null) return
+
+      ytext.insert(selection.index, data)
+      setSelection((prev) => {
+        if (prev == null) return null
+
+        const newPosition = {
+          index: prev.index + data.length,
+        }
+
+        return newPosition
+      })
+    },
+    [selection],
+  )
+
+  const handleSelectionChange = useCallback(() => {
+    const newPosition = getSelectionPosition(window.getSelection())
+
+    if (!isEqual(newPosition, selection)) {
+      setSelection(newPosition)
     }
+  }, [selection])
 
+  useEffect(() => {
     document.addEventListener('selectionchange', handleSelectionChange)
 
     return () => {
       document.removeEventListener('selectionchange', handleSelectionChange)
     }
+  }, [handleSelectionChange])
+
+  useLayoutEffect(() => {
+    const windowSelection = window.getSelection()
+
+    if (windowSelection == null) return
+
+    windowSelection.removeAllRanges()
+
+    if (selection == null) {
+      return
+    }
+
+    const richtext = document.getElementById('richtext')
+
+    if (richtext == null) return
+
+    let anchorNode: Node | null = null
+    let lastPosition = 0
+
+    for (let i = 0; i < richtext.childNodes.length; i++) {
+      const child = richtext.childNodes[i]
+
+      if (!isElement(child)) continue
+
+      const position = Number.parseInt(child.dataset.position ?? '', 10)
+
+      if (Number.isNaN(position)) continue
+
+      if (position > selection.index) break
+
+      anchorNode = child
+      lastPosition = position
+    }
+
+    if (anchorNode == null) return
+
+    windowSelection.setPosition(
+      anchorNode.childNodes[0],
+      selection.index - lastPosition,
+    )
   }, [selection])
 
   return (
     <main className="prose p-10">
       <h1>Richtext:</h1>
-      {text != null ? <RichText text={text} /> : <p>Loading...</p>}
+      {text != null ? (
+        <RichText text={text} handleBeforeInput={handleBeforeInput} />
+      ) : (
+        <p>Loading...</p>
+      )}
       <h1 className="mt-5">Internal state</h1>
       <pre>{JSON.stringify({ selection, text }, null, 2)}</pre>
     </main>
   )
 }
 
-function RichText({ text }: { text: RichText }) {
+function RichText({
+  text,
+  handleBeforeInput,
+}: {
+  text: RichText
+  handleBeforeInput: (event: FormEvent<HTMLDivElement>) => void
+}) {
   const positions = text
     .map((item) => item.insert.length)
     .reduce((acc, length) => {
@@ -78,6 +164,10 @@ function RichText({ text }: { text: RichText }) {
       contentEditable
       suppressContentEditableWarning
       spellCheck={false}
+      onBeforeInput={handleBeforeInput}
+      onKeyDown={(event) => {
+        if (event.key.length > 1) event.preventDefault()
+      }}
     >
       {text.map((item, index) => {
         return (
@@ -90,7 +180,6 @@ function RichText({ text }: { text: RichText }) {
               'whitespace-pre-wrap',
             )}
             data-position={index > 0 ? positions[index - 1] : 0}
-            data-type="insert"
           >
             {item.insert}
           </span>
@@ -120,6 +209,14 @@ function getSelectionPosition(selection: Selection | null) {
   if (Number.isNaN(position)) return null
 
   return { index: position + anchorOffset }
+}
+
+function isInputEvent(event: Event): event is InputEvent {
+  return 'data' in event
+}
+
+function isElement(node: Node): node is HTMLElement {
+  return node.nodeType === Node.ELEMENT_NODE
 }
 
 type RichText = Array<InsertText>
