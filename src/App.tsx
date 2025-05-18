@@ -166,6 +166,7 @@ function RichText({
       spellCheck={false}
       onBeforeInput={handleBeforeInput}
       onKeyDown={(event) => {
+        if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') return
         if (event.key.length > 1) event.preventDefault()
       }}
     >
